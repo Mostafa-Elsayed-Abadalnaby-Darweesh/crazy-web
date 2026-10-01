@@ -24,7 +24,10 @@ import {
   Circle,
   Pause,
   Square,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
+import { useSettings } from "@/store/settingsStore";
 import { useLab } from "@/store/labStore";
 import { canvasApi } from "@/lib/canvasRegistry";
 
@@ -41,6 +44,8 @@ const Sep = () => <div className="mx-1 h-5 w-px bg-slate-200" />;
 export function Toolbar() {
   const s = useLab();
   const hasSel = s.selection.length > 0 || !!s.selectedWireId;
+  const soundOn = useSettings((st) => st.preferences.sound !== false);
+  const setPreferences = useSettings((st) => st.setPreferences);
   const zoom = (f: number) => {
     const c = canvasApi()?.center();
     const scale = Math.max(0.15, Math.min(4, s.viewport.scale * f));
@@ -88,6 +93,7 @@ export function Toolbar() {
       <TB icon={Magnet} label="Snap to grid" active={s.settings.snapToGrid} onClick={() => s.setSettings({ snapToGrid: !s.settings.snapToGrid })} />
       <TB icon={Ruler} label="Rulers" active={s.settings.showRulers} onClick={() => s.setSettings({ showRulers: !s.settings.showRulers })} />
       <TB icon={Tags} label="Labels" active={s.settings.showLabels} onClick={() => s.setSettings({ showLabels: !s.settings.showLabels })} />
+      <TB icon={soundOn ? Volume2 : VolumeX} label={soundOn ? "Mute lab sounds" : "Unmute lab sounds"} active={soundOn} onClick={() => setPreferences({ sound: !soundOn })} />
       <div className="ml-auto flex items-center gap-2 pl-2">
         <div className="flex items-center gap-1 rounded-md border border-slate-200 px-1.5 py-0.5">
           {s.recStatus === "recording" ? (

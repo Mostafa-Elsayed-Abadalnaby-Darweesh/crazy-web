@@ -334,6 +334,19 @@ const ICONS: Record<string, (v?: string) => React.ReactNode> = {
       <path d="M6 17v3M10 17v2M14 17v3M18 17v2M22 17v3M26 17v2M30 17v3M34 17v2" {...S} strokeWidth={1} />
     </>
   ),
+  splint: () => (
+    <>
+      <path d="M20 12v24" stroke="#b45309" strokeWidth={3} strokeLinecap="round" />
+      <path d="M20 3q5 5 0 9q-5-4 0-9z" fill="#f97316" />
+    </>
+  ),
+  loop: () => (
+    <>
+      <path d="M20 4v14" stroke="#1e3a8a" strokeWidth={4} strokeLinecap="round" />
+      <path d="M20 18v14" {...S} />
+      <circle cx="20" cy="34" r="3" {...S} />
+    </>
+  ),
   heater: () => (
     <>
       <path d="M17 4h6v12h-6z" {...S} />

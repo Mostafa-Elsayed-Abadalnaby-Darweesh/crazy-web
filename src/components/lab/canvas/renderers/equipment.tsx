@@ -2,7 +2,7 @@
 import { Circle, Ellipse, Group, Line, Rect, Shape, Text } from "react-konva";
 import { DARK, FONT, Knob, METAL, MONO, Readout, type Renderer, fmt, findReading } from "./common";
 
-const flame = (clock: number, size: number, blue: boolean, key = 0) => {
+const flame = (clock: number, size: number, blue: boolean, key = 0, tint?: string) => {
   const flick = 1 + Math.sin(clock * 18 + key) * 0.06 + Math.sin(clock * 31) * 0.04;
   const hgt = size * flick;
   return (
@@ -16,8 +16,9 @@ const flame = (clock: number, size: number, blue: boolean, key = 0) => {
           ctx.closePath();
           ctx.fillStrokeShape(s);
         }}
-        fill={blue ? "rgba(96,165,250,0.75)" : "rgba(251,146,60,0.85)"}
-        shadowColor={blue ? "#60a5fa" : "#f97316"}
+        fill={tint ?? (blue ? "rgba(96,165,250,0.75)" : "rgba(251,146,60,0.85)")}
+        opacity={tint ? 0.9 : 1}
+        shadowColor={tint ?? (blue ? "#60a5fa" : "#f97316")}
         shadowBlur={12}
       />
       <Shape
@@ -34,7 +35,37 @@ const flame = (clock: number, size: number, blue: boolean, key = 0) => {
   );
 };
 
+function flameTint(c: { state: Record<string, unknown> }) {
+  const ft = c.state.flameTest as { color: string; at: number } | undefined;
+  return ft && Date.now() - ft.at < 900 ? ft.color : undefined;
+}
+
 export const EQUIPMENT: Record<string, Renderer> = {
+  splint: ({ w, h, c, clock }) => {
+    const cond = String(c.properties.condition);
+    return (
+      <Group>
+        <Rect x={w * 0.25} y={0} width={w * 0.5} height={h} cornerRadius={1} fill="#d6b27c" stroke="#a16207" strokeWidth={0.6} />
+        <Rect x={w * 0.25} y={h - 12} width={w * 0.5} height={12} fill={cond === "out" ? "#1c1917" : "#292524"} />
+        {cond === "glowing" && <Circle x={w / 2} y={h - 2} radius={3.5} fill="#f97316" shadowColor="#f97316" shadowBlur={14} opacity={0.75 + Math.sin(clock * 6) * 0.25} />}
+        {cond === "burning" && (
+          <Group x={w / 2} y={h - 1}>
+            {flame(clock, 20, false, 3)}
+          </Group>
+        )}
+      </Group>
+    );
+  },
+  loop: ({ w, h, c }) => {
+    const sample = c.state.sample as string | null | undefined;
+    return (
+      <Group>
+        <Rect x={w * 0.2} y={0} width={w * 0.6} height={h * 0.45} cornerRadius={3} fill="#1e3a8a" />
+        <Line points={[w / 2, h * 0.45, w / 2, h - 7]} stroke="#9ca3af" strokeWidth={1.4} />
+        <Circle x={w / 2} y={h - 4} radius={3.5} stroke="#9ca3af" strokeWidth={1.4} fill={sample && sample !== "none" ? "#f8fafc" : undefined} />
+      </Group>
+    );
+  },
   stand: ({ w, h }) => (
     <Group>
       <Rect x={0} y={h - 16} width={w} height={16} cornerRadius={3} fill="#475569" />
@@ -175,7 +206,11 @@ export const EQUIPMENT: Record<string, Renderer> = {
         <Rect x={w * 0.3} y={h * 0.62} width={w * 0.4} height={8} fill="#475569" />
         <Rect x={0} y={h - 10} width={w} height={10} cornerRadius={3} fill={DARK} />
         <Rect x={w - 2} y={h - 8} width={8} height={4} fill="#f59e0b" />
-        {lit && <Group x={w / 2} y={h * 0.18}>{flame(clock, size, c.properties.airHole === true)}</Group>}
+        {lit && (
+          <Group x={w / 2} y={h * 0.18}>
+            {flame(clock, size, c.properties.airHole === true, 0, flameTint(c))}
+          </Group>
+        )}
       </Group>
     );
   },

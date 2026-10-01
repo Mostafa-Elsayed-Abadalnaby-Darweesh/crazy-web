@@ -97,7 +97,7 @@ export const PHYSICS: Record<string, Renderer> = {
   led: (ctx) => {
     const { w, h, c } = ctx;
     const col = LED_COLORS[String(c.properties.color)] ?? "#ef4444";
-    const current = ctx.circuit?.current ?? 0;
+    const current = ctx.c.state.blown ? 0 : (ctx.circuit?.current ?? 0);
     const b = Math.max(0, Math.min(1, current / 0.02));
     const lit = current > 0.001;
     return (
@@ -115,7 +115,7 @@ export const PHYSICS: Record<string, Renderer> = {
             cx.closePath();
             cx.fillStrokeShape(s);
           }}
-          fill={col}
+          fill={ctx.c.state.blown ? "#57534e" : col}
           opacity={lit ? 0.95 : 0.45}
           stroke="#475569"
           strokeWidth={1}
@@ -145,14 +145,16 @@ export const PHYSICS: Record<string, Renderer> = {
     const { w, h } = ctx;
     const p = ctx.circuit?.power ?? 0;
     const rated = Number(ctx.c.properties.ratedPower) || 3;
-    const b = Math.max(0, Math.min(1.2, p / rated));
+    const blown = Boolean(ctx.c.state.blown);
+    const b = blown ? 0 : Math.max(0, Math.min(1.2, p / rated));
     const glow = b > 0.03;
     const r = w * 0.42;
     return (
       <Group>
         {glow && <Circle x={w / 2} y={r + 2} radius={r + 10 + b * 24} fill="#fde047" opacity={0.12 + b * 0.25} />}
         <Circle x={w / 2} y={r + 2} radius={r} fill={glow ? `rgba(254,240,138,${0.45 + b * 0.5})` : "rgba(241,245,249,0.8)"} stroke="#94a3b8" strokeWidth={1.2} shadowColor="#facc15" shadowBlur={glow ? 30 * b : 0} />
-        <Line points={[w * 0.4, r * 1.6, w * 0.42, r * 0.9, w * 0.5, r * 1.2, w * 0.58, r * 0.9, w * 0.6, r * 1.6]} stroke={glow ? "#f97316" : "#64748b"} strokeWidth={1.2} />
+        <Line points={blown ? [w * 0.4, r * 1.6, w * 0.42, r * 0.9, w * 0.47, r * 1.15] : [w * 0.4, r * 1.6, w * 0.42, r * 0.9, w * 0.5, r * 1.2, w * 0.58, r * 0.9, w * 0.6, r * 1.6]} stroke={glow ? "#f97316" : "#64748b"} strokeWidth={1.2} />
+        {blown && <Circle x={w / 2} y={r + 2} radius={r} fill="rgba(71,85,105,0.25)" />}
         <Rect x={w * 0.3} y={r * 1.9} width={w * 0.4} height={h - r * 1.9 - 8} fill="#a8a29e" cornerRadius={2} />
         <Line points={[w * 0.3, h - 8, w * 0.3, h]} stroke={METAL} strokeWidth={2} />
         <Line points={[w * 0.7, h - 8, w * 0.7, h]} stroke={METAL} strokeWidth={2} />

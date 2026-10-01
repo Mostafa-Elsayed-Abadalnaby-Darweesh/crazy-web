@@ -14,6 +14,7 @@ import { renderComponent } from "./renderers";
 import { FONT } from "./renderers/common";
 import { ContextMenu, type MenuState } from "./ContextMenu";
 import { Rulers } from "./Rulers";
+import { EffectsLayer } from "./EffectsLayer";
 
 const WIRE_COLORS = ["#dc2626", "#1f2937", "#2563eb", "#16a34a", "#d97706", "#7c3aed"];
 
@@ -53,6 +54,7 @@ export default function LabCanvas() {
     replayIndex,
     recording,
     dropHighlight,
+    effects,
   } = s;
 
   const frame = replayIndex != null ? recording[replayIndex] : null;
@@ -144,8 +146,9 @@ export default function LabCanvas() {
       simStatus === "running" ||
       components.some((c) => c.properties.lit === true || c.properties.stir === true || (c.type === "magnetic-stirrer" && c.properties.on === true) || c.state.gasRate || c.state.boiling || (c.type === "water-bath" && c.properties.on) || (c.type === "burette" && c.properties.open)) ||
       Object.values(circuit.elements).some((e) => Math.abs(e.current) > 1e-4) ||
-      components.some((c) => c.type === "gas-chamber"),
-    [components, simStatus, circuit],
+      components.some((c) => c.type === "gas-chamber" || c.state.onFire || c.state.burning || (c.type === "splint" && c.properties.condition !== "out") || (c.state.mixture && c.state.mixture.temperature > 55)) ||
+      effects.some((e) => Date.now() - e.at < 3500),
+    [components, simStatus, circuit, effects],
   );
   useEffect(() => {
     if (!animated) return;
@@ -490,6 +493,7 @@ export default function LabCanvas() {
                 </Group>
               );
             })}
+            <EffectsLayer components={components} effects={effects} clock={clock} />
             {wires.map(renderWire)}
             {settings.showLabels &&
               components.map((c) => {

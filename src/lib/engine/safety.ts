@@ -58,6 +58,8 @@ export function evaluateSafety(world: WorldContext): SafetyFinding[] {
         }
         if (ch.hazard.level === "danger" && !["hno3", "h2so4"].includes(id)) add(`chem-${id}`, "danger", ch.name, ch.hazard.statement, ch.hazard.ppe);
       }
+      if (c.state.onFire) add("fire", "danger", "Fire!", "The contents are burning. Cover the vessel with a lid or heat-proof mat to smother the flames; never use water on burning solvents.", ["Safety goggles", "Lab coat", "Fire blanket"]);
+      if (c.state.burning === "mg") add("mg-burning", "caution", "Burning magnesium", "Intense white light — do not look directly at the flame.", ["Safety goggles"]);
       if (m.temperature > 60) add("hot", "caution", "Hot liquid", `Temperature is ${m.temperature.toFixed(0)} °C — use tongs and heat-resistant gloves.`, ["Heat-resistant gloves", "Safety goggles"]);
     }
 

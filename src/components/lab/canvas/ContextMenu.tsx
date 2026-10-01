@@ -71,6 +71,7 @@ export function ContextMenu({ menu, onClose }: { menu: MenuState; onClose: () =>
                 )}
               </div>
               <Item icon={Droplets} label="Empty container" onClick={act(() => s.emptyContainer(c.id))} />
+              {Boolean(c.state.onFire || c.state.burning) && <Item icon={Trash2} label="Smother the flames" danger onClick={act(() => s.extinguish(c.id))} />}
             </>
           )}
           {def?.actions?.filter((a) => a.id !== "empty").length ? <div className="my-1 border-t border-slate-100" /> : null}

@@ -10,7 +10,7 @@ import type {
 } from "@/lib/engine/types";
 import { getDefinition } from "@/lib/engine/registry";
 import { componentAt, componentBelow, localPoint } from "@/lib/engine/geometry";
-import { computePH, describeContents, emptyMixture, heatCapacity, react, totalMass, transfer } from "@/lib/chemistry/mixture";
+import { cloneMixture, computePH, describeContents, emptyMixture, heatCapacity, react, totalMass, transfer } from "@/lib/chemistry/mixture";
 import { getChemical, prettyFormula } from "@/lib/chemistry/chemicals";
 
 export const num = (c: LabComponent, key: string, fallback = 0): number => {
@@ -134,20 +134,31 @@ export function containerSimulate(c: LabComponent, world: WorldContext): Simulat
   state.heatedBy = source?.id ?? null;
 
   // Reactions
-  const gasBefore = Object.values(mix.gases).reduce((a, b) => a + b, 0);
+  const gasesBefore = { ...mix.gases };
   const r = react(mix, dt * (stir ? 1.6 : 1), world.time);
   mix = r.mixture;
   for (const info of r.started) {
-    events.push({ kind: "reaction", message: `${c.name}: ${info.equation} — ${info.type}` });
+    events.push({ kind: "reaction", message: `${c.name}: ${info.equation} — ${info.type}`, effect: info.effect });
     for (const o of info.observations) events.push({ kind: "observation", message: `${c.name}: ${o}` });
   }
   for (const info of r.completed) events.push({ kind: "reaction", message: `${c.name}: reaction complete (${info.equation})` });
-  const gasAfter = Object.values(mix.gases).reduce((a, b) => a + b, 0);
-  state.gasRate = dt > 0 ? (gasAfter - gasBefore) / dt : 0;
+
+  // Combustion: hydrogen pops, burning vapours and burning metals
+  mix = combustion(c, mix, world, source, events, state);
+
+  // Per-gas evolution rates (splint tests, coloured gas haze, fizzing sounds)
+  const gasRates: Record<string, number> = {};
+  for (const [id, n] of Object.entries(mix.gases)) {
+    const d = n - (gasesBefore[id] ?? 0);
+    if (d > 1e-12 && dt > 0) gasRates[id] = d / dt;
+  }
+  state.gasRates = gasRates;
+  state.gasRate = Object.values(gasRates).reduce((a, b) => a + b, 0);
+  if (mix.volumeMl < 0.5) mix = { ...mix, temperature: Math.min(mix.temperature, 1100) };
 
   // Automatic observations for the timeline
   const lastT = typeof c.state.lastLoggedT === "number" ? (c.state.lastLoggedT as number) : T0;
-  if (Math.abs(mix.temperature - lastT) >= 3) {
+  if (Math.abs(mix.temperature - lastT) >= (mix.temperature > 150 ? 100 : 3)) {
     events.push({ kind: "measurement", message: `${c.name}: temperature ${mix.temperature > lastT ? "increased" : "decreased"} to ${mix.temperature.toFixed(1)} °C` });
     state.lastLoggedT = mix.temperature;
   } else if (c.state.lastLoggedT == null) state.lastLoggedT = T0;
@@ -160,6 +171,107 @@ export function containerSimulate(c: LabComponent, world: WorldContext): Simulat
   }
   state.mixture = mix;
   return { state, events };
+}
+
+/* ------------------------------------------------------------------ */
+/* Flames & combustion                                                 */
+/* ------------------------------------------------------------------ */
+
+const FLAME_HEIGHT: Record<string, number> = { low: 28, medium: 44, high: 62 };
+
+/** Point where a Bunsen burner's flame sits (base) and its height, in world units. */
+export function burnerFlame(b: LabComponent): { base: { x: number; y: number }; height: number } {
+  return { base: localPoint(b, 0.5, 0.18), height: FLAME_HEIGHT[str(b, "flame", "medium")] ?? 44 };
+}
+
+/** Find an open flame within `radius` of point `p` (lit burner, burning splint, or a vessel on fire). */
+export function flameNear(world: WorldContext, p: { x: number; y: number }, radius: number, excludeId?: string): LabComponent | undefined {
+  for (const f of world.byId.values()) {
+    if (f.id === excludeId) continue;
+    if (f.type === "bunsen-burner" && bool(f, "lit")) {
+      const { base, height } = burnerFlame(f);
+      const y = Math.max(base.y - height, Math.min(base.y, p.y));
+      if (Math.hypot(p.x - base.x, p.y - y) < radius) return f;
+    } else if (f.type === "splint" && str(f, "condition") === "burning") {
+      const tip = localPoint(f, 0.5, 1);
+      if (Math.hypot(p.x - tip.x, p.y - tip.y) < radius) return f;
+    } else if (f.state.onFire || f.state.burning) {
+      const m = localPoint(f, 0.5, 0);
+      if (Math.hypot(p.x - m.x, p.y - m.y) < radius) return f;
+    }
+  }
+  return undefined;
+}
+
+function combustion(c: LabComponent, input: Mixture, world: WorldContext, heatSource: LabComponent | undefined, events: SimEvent[], state: Record<string, unknown>): Mixture {
+  const dt = world.dt;
+  let mix = input;
+  const mouth = localPoint(c, 0.5, 0.02);
+  const flame = flameNear(world, mouth, 70, c.id);
+  const onBurner = heatSource?.type === "bunsen-burner" && bool(heatSource, "lit");
+
+  // 1. Hydrogen escaping near a flame burns with a "squeaky pop"
+  const h2Now = (mix.gases.h2 ?? 0) - ((c.state.mixture as Mixture | undefined)?.gases.h2 ?? 0);
+  const lastPop = typeof c.state.lastPop === "number" ? (c.state.lastPop as number) : -Infinity;
+  if (h2Now > 1e-7 && flame && world.time - lastPop >= 3) {
+    events.push({ kind: "observation", message: `${c.name}: squeaky pop — hydrogen burns in air (2H₂ + O₂ → 2H₂O)`, effect: "pop" });
+    state.lastPop = world.time;
+  }
+
+  // 2. Flammable liquids ignite when an open flame reaches their vapour
+  const flammables = Object.keys(mix.species).filter((id) => getChemical(id)?.flammable && getChemical(id)?.form === "liquid");
+  let onFire = Boolean(c.state.onFire);
+  if (!onFire && flammables.length && mix.volumeMl > 0.2 && (flame || onBurner)) {
+    onFire = true;
+    const names = flammables.map((id) => getChemical(id)?.name).join(", ");
+    events.push({ kind: "safety", message: `${c.name}: ${names} vapour ignites — the liquid is on fire! Cover the vessel to smother the flames.`, effect: "ignite" });
+  }
+  if (onFire) {
+    if (!flammables.length || mix.volumeMl <= 0.2) {
+      onFire = false;
+      events.push({ kind: "observation", message: `${c.name}: flames die out — the fuel is used up`, effect: "smoke" });
+    } else {
+      // burn ~0.5 mL of fuel per second; part of the combustion heat warms the vessel
+      mix = cloneMixture(mix);
+      let heat = 0;
+      for (const id of flammables) {
+        const ch = getChemical(id)!;
+        const moles = Math.min(mix.species[id], ((0.5 * ch.density) / ch.molarMass) * dt / flammables.length);
+        mix.species[id] -= moles;
+        if (mix.species[id] < 1e-9) delete mix.species[id];
+        mix.volumeMl = Math.max(0, mix.volumeMl - (moles * ch.molarMass) / ch.density);
+        mix.gases.co2 = (mix.gases.co2 ?? 0) + moles * 2;
+        heat += moles * 1300e3 * 0.08;
+      }
+      mix.temperature += heat / Math.max(heatCapacity(mix), 1);
+    }
+  }
+  state.onFire = onFire;
+
+  // 3. Magnesium heated strongly in air burns with a dazzling white flame
+  const mg = mix.solids.mg ?? 0;
+  const dry = mix.volumeMl < 0.5;
+  let burning = c.state.burning === "mg" ? "mg" : null;
+  if (!burning && mg > 1e-6 && dry && (onBurner || flameNear(world, localPoint(c, 0.5, 0.6), 60, c.id))) {
+    burning = "mg";
+    events.push({ kind: "reaction", message: `${c.name}: magnesium ignites and burns with a dazzling white flame — 2Mg + O₂ → 2MgO`, effect: "flash" });
+    events.push({ kind: "safety", message: `${c.name}: do not look directly at burning magnesium (intense UV light)` });
+  }
+  if (burning) {
+    if (mg <= 1e-6 || !dry) {
+      burning = null;
+      events.push({ kind: "observation", message: `${c.name}: burning stops — white magnesium oxide ash remains`, effect: "smoke" });
+    } else {
+      mix = cloneMixture(mix);
+      const n = Math.min(mg, 0.01 * dt);
+      mix.solids.mg -= n;
+      if (mix.solids.mg < 1e-9) delete mix.solids.mg;
+      mix.solids.mgo = (mix.solids.mgo ?? 0) + n;
+      mix.temperature = Math.max(mix.temperature, 900);
+    }
+  }
+  state.burning = burning;
+  return mix;
 }
 
 export function containerReadings(c: LabComponent): Reading[] {

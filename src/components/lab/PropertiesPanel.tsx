@@ -341,6 +341,14 @@ function ComponentProperties({ c }: { c: LabComponent }) {
         </button>
       </div>
       <p className="border-b border-slate-100 px-4 py-2 text-[11.5px] leading-snug text-slate-500">{def.description}</p>
+      {Boolean(c.state.onFire || c.state.burning) && (
+        <div className="border-b border-red-100 bg-red-50 px-4 py-3">
+          <div className="text-[12.5px] font-semibold text-red-700">{c.state.onFire ? "🔥 The contents are on fire" : "Magnesium is burning"}</div>
+          <button className="btn btn-sm mt-2 w-full border-red-300 text-red-700 hover:bg-red-100" onClick={() => s.extinguish(c.id)}>
+            Cover vessel to smother the flames
+          </button>
+        </div>
+      )}
 
       {readings.length > 0 && (
         <Section title="Live readings" icon={Gauge}>

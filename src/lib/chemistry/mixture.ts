@@ -266,6 +266,7 @@ export function react(mix: Mixture, dt: number, time: number): ReactResult {
           extent,
           at: time,
           completed: !rule.rate,
+          effect: rule.effect,
         };
         m.reactions = [...m.reactions.filter((x) => x.id !== rule.id), info];
         started.push(info);

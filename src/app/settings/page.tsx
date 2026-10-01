@@ -92,12 +92,14 @@ export default function SettingsPage() {
             {toggle("snapToGrid", "Snap to grid", "Align dropped and moved objects to the grid.")}
             {toggle("showRulers", "Show rulers", "Millimetre rulers along the canvas edges.")}
             {toggle("confirmDelete", "Confirm before deleting experiments", "Ask before removing saved experiments.")}
+            {toggle("sound", "Lab sounds", "Fizzing, burner roar, hydrogen pops, boiling, sparks and other effects.")}
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {num("logInterval", "Default logging interval", "seconds")}
             {num("simSpeed", "Default simulation speed", "×", 0.25)}
             {num("ambientTemperature", "Ambient temperature", "°C", 1)}
             {num("gravity", "Gravitational field", "m/s²", 0.01)}
+            {num("soundVolume", "Sound volume", "0 – 1", 0.1)}
           </div>
         </Card>
 

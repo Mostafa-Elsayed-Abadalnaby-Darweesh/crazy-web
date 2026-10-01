@@ -42,6 +42,7 @@ export interface ReactionInfo {
   extent: number; // mol
   at: number; // sim time (s)
   completed?: boolean;
+  effect?: EffectType;
 }
 
 export interface ComponentState {
@@ -322,10 +323,26 @@ export interface OpticsSolution {
   screenHits: Record<string, { y: number; color: string }[]>;
 }
 
+/** Transient audio-visual effects (flashes, pops, splashes…) triggered by the simulation. */
+export type EffectType =
+  | "pop"
+  | "flash"
+  | "ignite"
+  | "precipitate"
+  | "splash"
+  | "spark"
+  | "burnout"
+  | "extinguish"
+  | "relight"
+  | "sizzle"
+  | "smoke"
+  | "click";
+
 export interface SimEvent {
   kind: TimelineKind;
   message: string;
   alert?: Omit<SafetyAlert, "id" | "at">;
+  effect?: EffectType;
 }
 
 export interface ComponentPatch {

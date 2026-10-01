@@ -86,6 +86,11 @@ export function solveCircuit(
       const a = idx(terminalKey(c.id, ta.id));
       const b = idx(terminalKey(c.id, tb.id));
       const model = def.circuit!;
+      if (c.state.blown) {
+        // a burnt-out filament or LED is an open circuit
+        elements.push({ id: c.id, a, b, g: G_MIN, i: 0 });
+        continue;
+      }
       switch (model.kind) {
         case "source": {
           const enabled = model.enabledKey ? c.properties[model.enabledKey] !== false : true;

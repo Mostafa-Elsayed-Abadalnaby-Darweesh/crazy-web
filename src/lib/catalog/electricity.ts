@@ -22,6 +22,13 @@ function def(d: Omit<ComponentDefinition, "category" | "group" | "roles"> & { ro
   return { category: "physics", group: G, roles: ["circuit"], terminals: TWO, ...d } as ComponentDefinition;
 }
 
+/** Very large currents from a source throw sparks (short circuit). */
+function shortCircuitSparks(c: LabComponent, w: WorldContext) {
+  const I = Math.abs(sol(c, w).current);
+  const last = typeof c.state.lastSpark === "number" ? (c.state.lastSpark as number) : -Infinity;
+  if (I > 8 && w.time - last > 1.5) return { state: { lastSpark: w.time }, events: [{ kind: "safety" as const, message: `${c.name}: sparks — short circuit drawing ${I.toFixed(1)} A`, effect: "spark" as const }] };
+}
+
 export const ELECTRICITY_DEFINITIONS: ComponentDefinition[] = [
   def({
     type: "battery",
@@ -36,6 +43,7 @@ export const ELECTRICITY_DEFINITIONS: ComponentDefinition[] = [
     circuit: { kind: "source", voltageKey: "voltage" },
     properties: [P.number("voltage", "EMF", "V", 0, 48, 0.5, "Electrical"), P.number("internalResistance", "Internal resistance", "Ω", 0.001, 10, 0.01, "Electrical")],
     defaults: { voltage: 6, internalResistance: 0.1 },
+    simulate: shortCircuitSparks,
     readings: (c, w) => {
       const s = sol(c, w);
       return [
@@ -63,6 +71,7 @@ export const ELECTRICITY_DEFINITIONS: ComponentDefinition[] = [
       P.number("frequency", "Frequency", "Hz", 0.1, 50, 0.1, "Electrical"),
     ],
     defaults: { on: true, voltage: 12, mode: "DC", frequency: 1 },
+    simulate: shortCircuitSparks,
     readings: basicReadings,
   }),
   def({
@@ -143,9 +152,15 @@ export const ELECTRICITY_DEFINITIONS: ComponentDefinition[] = [
     properties: [P.select("color", "Colour", [["red", "Red"], ["green", "Green"], ["blue", "Blue"], ["yellow", "Yellow"], ["white", "White"]], "Electrical"), P.number("forwardVoltage", "Forward voltage", "V", 1, 4, 0.1, "Electrical")],
     defaults: { color: "red", forwardVoltage: 2 },
     simulate: (c, w) => {
-      const lit = sol(c, w).current > 0.001;
-      return { state: { lit, brightness: Math.min(1, sol(c, w).current / 0.02) }, events: lit && !c.state.lit ? [{ kind: "observation", message: `${c.name} lights up` }] : [] };
+      if (c.state.blown) return;
+      const I = sol(c, w).current;
+      const over = I > 0.06 ? ((c.state.overload as number) ?? 0) + w.dt : 0;
+      if (over > 0.8) return { state: { blown: true, lit: false, brightness: 0, overload: 0 }, events: [{ kind: "observation", message: `${c.name} burns out — too much current (use a series resistor)`, effect: "burnout" }] };
+      const lit = I > 0.001;
+      return { state: { lit, brightness: Math.min(1, I / 0.02), overload: over }, events: lit && !c.state.lit ? [{ kind: "observation", message: `${c.name} lights up` }] : [] };
     },
+    actions: [{ id: "replace", label: "Replace LED" }],
+    onAction: (a, c) => (a === "replace" ? { state: { blown: false, overload: 0 }, events: [{ kind: "action", message: `${c.name} replaced` }] } : undefined),
     readings: basicReadings,
   }),
   def({
@@ -158,7 +173,7 @@ export const ELECTRICITY_DEFINITIONS: ComponentDefinition[] = [
     properties: [P.toggle("closed", "Closed", "Electrical")],
     defaults: { closed: false },
     actions: [{ id: "toggle", label: "Toggle switch" }],
-    onAction: (a, c) => (a === "toggle" ? { properties: { closed: !bool(c, "closed") }, events: [{ kind: "action", message: `${c.name} ${bool(c, "closed") ? "opened" : "closed"}` }] } : undefined),
+    onAction: (a, c) => (a === "toggle" ? { properties: { closed: !bool(c, "closed") }, events: [{ kind: "action", message: `${c.name} ${bool(c, "closed") ? "opened" : "closed"}`, effect: "click" }] } : undefined),
   }),
   def({
     type: "wire-segment",
@@ -184,10 +199,16 @@ export const ELECTRICITY_DEFINITIONS: ComponentDefinition[] = [
     circuit: { kind: "resistor", resistanceKey: "resistance" },
     properties: [P.number("resistance", "Resistance", "Ω", 0.5, 1000, 0.5, "Electrical"), P.number("ratedPower", "Rated power", "W", 0.1, 100, 0.1, "Electrical")],
     defaults: { resistance: 12, ratedPower: 3 },
+    actions: [{ id: "replace", label: "Replace bulb" }],
+    onAction: (a, c) => (a === "replace" ? { state: { blown: false, overload: 0 }, events: [{ kind: "action", message: `${c.name} replaced` }] } : undefined),
     simulate: (c, w) => {
-      const b = Math.min(1.2, sol(c, w).power / num(c, "ratedPower", 3));
+      if (c.state.blown) return;
+      const raw = sol(c, w).power / num(c, "ratedPower", 3);
+      const over = raw > 1.8 ? ((c.state.overload as number) ?? 0) + w.dt : 0;
+      if (over > 1.2) return { state: { blown: true, lit: false, brightness: 0, overload: 0 }, events: [{ kind: "observation", message: `${c.name}: filament burns out — voltage too high for its rating`, effect: "burnout" }] };
+      const b = Math.min(1.2, raw);
       const lit = b > 0.05;
-      return { state: { brightness: b, lit }, events: lit && !c.state.lit ? [{ kind: "observation", message: `${c.name} lights up` }] : !lit && c.state.lit ? [{ kind: "observation", message: `${c.name} goes out` }] : [] };
+      return { state: { brightness: b, lit, overload: over }, events: lit && !c.state.lit ? [{ kind: "observation", message: `${c.name} lights up` }] : !lit && c.state.lit ? [{ kind: "observation", message: `${c.name} goes out` }] : [] };
     },
     readings: basicReadings,
   }),

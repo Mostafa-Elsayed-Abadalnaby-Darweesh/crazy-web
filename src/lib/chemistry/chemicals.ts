@@ -830,6 +830,9 @@ export const CHEMICALS: Chemical[] = [
   { id: "zncl2", name: "Zinc chloride", formula: "ZnCl2", categories: ["salt", "inorganic"], state: "aqueous", form: "solution", molarMass: 136.3, density: 1.02, defaultConcentration: 0.5, soluble: true, hazard: corrosive("Corrosive."), description: "Soluble zinc salt." },
   { id: "znso4", name: "Zinc sulfate", formula: "ZnSO4", categories: ["salt", "inorganic"], state: "aqueous", form: "solution", molarMass: 161.47, density: 1.02, defaultConcentration: 0.5, soluble: true, hazard: irritant("Eye irritant."), description: "Colourless zinc salt." },
   { id: "alcl3", name: "Aluminium chloride", formula: "AlCl3", categories: ["salt", "inorganic"], state: "aqueous", form: "solution", molarMass: 133.34, density: 1.02, defaultConcentration: 0.5, soluble: true, hazard: corrosive("Corrosive."), description: "Soluble aluminium salt." },
+  { id: "mgo", name: "Magnesium oxide", formula: "MgO", categories: ["inorganic", "base"], state: "solid", form: "solid", molarMass: 40.3, density: 3.58, soluble: false, color: "#fafafa", hazard: safe(), description: "White ash formed when magnesium burns." },
+  { id: "licl", name: "Lithium chloride", formula: "LiCl", categories: ["salt", "inorganic"], state: "solid", form: "solid", molarMass: 42.39, density: 2.07, soluble: true, hazard: irritant("Harmful if swallowed."), description: "Gives a crimson flame test." },
+  { id: "srcl2", name: "Strontium chloride", formula: "SrCl2", categories: ["salt", "inorganic"], state: "solid", form: "solid", molarMass: 158.53, density: 3.05, soluble: true, hazard: irritant("Causes serious eye damage."), description: "Gives a bright red flame test." },
   { id: "k2so4", name: "Potassium sulfate", formula: "K2SO4", categories: ["salt", "inorganic"], state: "aqueous", form: "solution", molarMass: 174.26, density: 1.03, defaultConcentration: 0.5, soluble: true, hazard: safe(), description: "Neutral salt." },
   { id: "mgso4", name: "Magnesium sulfate", formula: "MgSO4", categories: ["salt", "inorganic"], state: "aqueous", form: "solution", molarMass: 120.37, density: 1.03, defaultConcentration: 0.5, soluble: true, hazard: safe(), description: "Epsom salt." },
   { id: "mnso4", name: "Manganese(II) sulfate", formula: "MnSO4", categories: ["salt", "inorganic"], state: "aqueous", form: "solution", molarMass: 151.0, density: 1.03, defaultConcentration: 0.5, soluble: true, color: "#fbe7ee", colorStrength: 2, hazard: irritant("Harmful on prolonged exposure."), description: "Very pale pink salt." },
@@ -845,6 +848,28 @@ export const CHEMICALS: Chemical[] = [
 ];
 
 const BY_ID = new Map(CHEMICALS.map((c) => [c.id, c]));
+
+/** Characteristic flame-test colours of metal ions. */
+export const FLAME_COLORS: Record<string, { ion: string; color: string; name: string }> = {
+  Li: { ion: "Li⁺", color: "#dc2626", name: "crimson" },
+  Na: { ion: "Na⁺", color: "#fbbf24", name: "bright yellow-orange" },
+  K: { ion: "K⁺", color: "#c084fc", name: "lilac" },
+  Ca: { ion: "Ca²⁺", color: "#ea580c", name: "brick red" },
+  Sr: { ion: "Sr²⁺", color: "#ef4444", name: "red" },
+  Ba: { ion: "Ba²⁺", color: "#a3e635", name: "apple green" },
+  Cu: { ion: "Cu²⁺", color: "#14b8a6", name: "blue-green" },
+};
+
+const FLAME_ION: Record<string, keyof typeof FLAME_COLORS> = {
+  licl: "Li", nacl: "Na", naoh: "Na", na2co3: "Na", nahco3: "Na", nano3: "Na", na2so4: "Na", naocl: "Na", na2s2o3: "Na", ch3coona: "Na",
+  kcl: "K", koh: "K", ki: "K", kno3: "K", kmno4: "K", k2cr2o7: "K", k2so4: "K",
+  cacl2: "Ca", caco3: "Ca", caoh2: "Ca", srcl2: "Sr", bacl2: "Ba", cuso4: "Cu", cuo: "Cu", cucl2: "Cu",
+};
+
+export function flameIon(chemId: string) {
+  const k = FLAME_ION[chemId];
+  return k ? FLAME_COLORS[k] : undefined;
+}
 
 export function getChemical(id: string): Chemical | undefined {
   return BY_ID.get(id);

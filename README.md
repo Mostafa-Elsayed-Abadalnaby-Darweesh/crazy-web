@@ -16,8 +16,9 @@
 | **Charts** | Line, bar, scatter and area charts (Recharts) with selectable X/Y axes and multiple datasets, updating live; linear-regression fits. |
 | **Timeline & recording** | Every action, reaction, observation, measurement and safety warning is timestamped. Record a session and replay it step by step. |
 | **Notebook & reports** | 15-section lab notebook (auto-fill from the experiment). Academic report with snapshot, tables, charts, calculations; customise institution, logo, student, course and instructor; print or download PDF (React-PDF, embedded DejaVu fonts for chemical formulae). |
+| **Realism effects** | Procedural Web Audio sounds (no audio files): hydrogen "squeaky pop", fizzing proportional to gas rate, Bunsen roar, boiling, fire crackle, sparks, switch clicks, motor hum — mutable from the toolbar. Visuals: steam over hot liquids, coloured gases (Cl₂, SO₂, NH₃), flammable solvents igniting near flames (smother to extinguish), magnesium burning with a white flash, sodium skating on water with a flame, falling precipitates, pouring streams, splashes, short-circuit sparks, bulbs/LEDs burning out. Gas tests with a wooden splint (H₂ pop, O₂ relights a glowing splint, CO₂ extinguishes) and flame tests with a nichrome loop (Li crimson, Na yellow, K lilac, Ca brick red, Cu blue-green…). |
 | **Safety** | Safe / Caution / Danger levels, hazardous-combination warnings (e.g. bleach + acid → toxic chlorine), PPE recommendations. |
-| **Templates** | 17 ready-made experiments: titration, reaction rate, pH, electrolysis, salt preparation, precipitation, gas preparation, calorimetry, Ohm's law, Hooke's law, pendulum, Newton's 2nd law, series/parallel circuits, lens, refraction, free fall. |
+| **Templates** | 21 ready-made experiments: gas tests, flame tests, burning magnesium, sodium in water, titration, reaction rate, pH, electrolysis, salt preparation, precipitation, gas preparation, calorimetry, Ohm's law, Hooke's law, pendulum, Newton's 2nd law, series/parallel circuits, lens, refraction, free fall. |
 
 ## Pages
 

@@ -4,6 +4,7 @@ import { computePH } from "@/lib/chemistry/mixture";
 import {
   P,
   bool,
+  burnerFlame,
   containerReadings,
   containerSimulate,
   dispenseAction,
@@ -16,6 +17,7 @@ import {
   stopcockSimulate,
   str,
 } from "./helpers";
+import { flameIon } from "@/lib/chemistry/chemicals";
 
 const GROUP_GLASS = "Glassware";
 const GROUP_TRANSFER = "Measuring & transfer";
@@ -131,6 +133,85 @@ export const CHEMISTRY_DEFINITIONS: ComponentDefinition[] = [
   { type: "wire-gauze", label: "Wire gauze", category: "chemistry", group: GROUP_HEAT, description: "Spreads heat evenly under glassware.", size: { width: 110, height: 10 }, visual: { archetype: "gauze" }, roles: ["support"], properties: [], defaults: {}, emptyMass: 60 },
   { type: "spatula", label: "Spatula", category: "chemistry", group: GROUP_SUPPORT, description: "Transfers small amounts of solids.", size: { width: 110, height: 14 }, visual: { archetype: "spatula" }, roles: ["tool"], properties: [], defaults: {}, emptyMass: 15 },
   { type: "scoopula", label: "Scoopula", category: "chemistry", group: GROUP_SUPPORT, description: "Curved spatula for scooping solids.", size: { width: 110, height: 16 }, visual: { archetype: "spatula", variant: "scoop" }, roles: ["tool"], properties: [], defaults: {}, emptyMass: 18 },
+
+  {
+    type: "splint",
+    label: "Wooden splint",
+    category: "chemistry",
+    group: "Gas tests",
+    description: "Hold over a vessel's mouth: a burning splint 'pops' with H₂ and goes out in CO₂; a glowing splint relights in O₂.",
+    keywords: ["gas test", "hydrogen", "oxygen", "pop"],
+    size: { width: 10, height: 120 },
+    visual: { archetype: "splint" },
+    roles: ["tool"],
+    properties: [P.select("condition", "Splint", [["burning", "Burning"], ["glowing", "Glowing (blown out)"], ["out", "Extinguished"]], "Controls")],
+    defaults: { condition: "burning" },
+    actions: [{ id: "light", label: "Light splint" }, { id: "blow", label: "Blow out (glowing)" }],
+    onAction: (a, c) => {
+      if (a === "light") return { properties: { condition: "burning" }, events: [{ kind: "action", message: `${c.name} lit`, effect: "ignite" }] };
+      if (a === "blow") return { properties: { condition: "glowing" }, events: [{ kind: "action", message: `${c.name} blown out — tip still glowing`, effect: "smoke" }] };
+    },
+    simulate: (c, w) => {
+      const tip = localPoint(c, 0.5, 1);
+      const condition = str(c, "condition", "burning");
+      // the vessel whose mouth the splint tip is held at
+      let vessel: LabComponent | undefined;
+      for (const o of w.byId.values()) {
+        if (!isContainer(o)) continue;
+        const m = localPoint(o, 0.5, 0);
+        if (Math.abs(tip.x - m.x) < Math.max(20, o.dimensions.width * 0.4) && tip.y > m.y - 45 && tip.y < m.y + o.dimensions.height * 0.5) vessel = o;
+      }
+      if (!vessel) return;
+      const rates = (vessel.state.gasRates as Record<string, number> | undefined) ?? {};
+      if (condition === "glowing" && (rates.o2 ?? 0) > 1e-6)
+        return { properties: { condition: "burning" }, events: [{ kind: "observation", message: `${c.name} relights in the gas from ${vessel.name} — oxygen is present`, effect: "relight" }] };
+      if (condition === "burning" && ((rates.co2 ?? 0) > 1e-6 || (rates.n2 ?? 0) > 1e-6) && !(rates.h2 > 0) && !(rates.o2 > 0))
+        return { properties: { condition: "out" }, events: [{ kind: "observation", message: `${c.name} is extinguished by the gas from ${vessel.name} — carbon dioxide present`, effect: "extinguish" }] };
+    },
+  },
+  {
+    type: "nichrome-loop",
+    label: "Flame-test loop",
+    category: "chemistry",
+    group: "Gas tests",
+    description: "Nichrome wire loop. Dip it into a salt or solution, then hold it in a Bunsen flame to identify the metal ion by its flame colour.",
+    keywords: ["flame test", "nichrome", "wire loop"],
+    size: { width: 14, height: 130 },
+    visual: { archetype: "loop" },
+    roles: ["tool"],
+    properties: [],
+    defaults: {},
+    actions: [{ id: "dip", label: "Dip into vessel" }, { id: "clean", label: "Clean in HCl" }],
+    onAction: (a, c, w) => {
+      if (a === "clean") return { state: { sample: null, tested: null }, events: [{ kind: "action", message: `${c.name} cleaned` }] };
+      if (a !== "dip") return;
+      const tip = localPoint(c, 0.5, 1);
+      const vessel = componentAt(w, tip, isContainer, c.id);
+      if (!vessel) return { events: [{ kind: "action", message: `${c.name}: place the loop tip inside a vessel to take a sample` }] };
+      const m = mixtureOf(vessel);
+      const ids = [...Object.keys(m.species), ...Object.keys(m.solids)];
+      const hit = ids.map((id) => ({ id, ion: flameIon(id) })).find((x) => x.ion);
+      return {
+        state: { sample: hit?.id ?? "none", tested: null },
+        events: [{ kind: "action", message: `${c.name} dipped into ${vessel.name}${hit ? "" : " (no flame-colouring ions found)"}` }],
+      };
+    },
+    simulate: (c, w) => {
+      const sample = c.state.sample as string | null | undefined;
+      if (!sample) return;
+      const tip = localPoint(c, 0.5, 1);
+      for (const b of w.byId.values()) {
+        if (b.type !== "bunsen-burner" || !bool(b, "lit")) continue;
+        const { base, height } = burnerFlame(b);
+        if (Math.abs(tip.x - base.x) < 16 && tip.y < base.y + 4 && tip.y > base.y - height - 10) {
+          const ion = flameIon(sample);
+          const color = ion?.color ?? "#60a5fa";
+          const events = c.state.tested === sample ? [] : [{ kind: "observation" as const, message: ion ? `Flame test: ${ion.name} flame — ${ion.ion} present` : "Flame test: no characteristic colour" }];
+          return { state: { tested: sample }, events, patches: [{ id: b.id, state: { flameTest: { color, at: Date.now() } } }] };
+        }
+      }
+    },
+  },
 
   /* ---------------- Instruments ---------------- */
   {

@@ -20,6 +20,7 @@ import { PropertiesPanel } from "./PropertiesPanel";
 import { Toolbar } from "./Toolbar";
 import { BottomPanel } from "./bottom/BottomPanel";
 import { LabIcon } from "./LabIcon";
+import { useLabSounds } from "@/hooks/useLabSounds";
 
 const LabCanvas = dynamic(() => import("./canvas/LabCanvas"), { ssr: false, loading: () => <div className="flex h-full items-center justify-center text-sm text-slate-400">Loading workbench…</div> });
 
@@ -151,6 +152,7 @@ export function Workspace() {
   useKeyboardShortcuts();
   useSimulationLoop();
   useAutosave();
+  useLabSounds();
 
   const onDragStart = (e: DragStartEvent) => {
     setDrag(e.active.data.current as DragData);

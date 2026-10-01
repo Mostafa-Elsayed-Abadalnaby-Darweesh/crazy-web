@@ -19,6 +19,7 @@ import type {
   Wire,
   WireEnd,
   WorkspaceSettings,
+  EffectType,
   CircuitSolution,
   OpticsSolution,
   Environment,
@@ -29,7 +30,7 @@ import { createComponent, initialStateFor, uid } from "@/lib/engine/factory";
 import { buildWorld, collectReadings, runAction, stepSimulation, DEFAULT_ENV, type LiveReading } from "@/lib/engine/simulation";
 import { evaluateSafety, type SafetyFinding, LEVEL_RANK } from "@/lib/engine/safety";
 import { componentAt, contains, boundsOf } from "@/lib/engine/geometry";
-import { addChemical, describeAmount, emptyMixture, react, transfer, defaultAmount, type AddAmount } from "@/lib/chemistry/mixture";
+import { addChemical, describeAmount, emptyMixture, mixtureAppearance, react, transfer, defaultAmount, type AddAmount } from "@/lib/chemistry/mixture";
 import { getChemical } from "@/lib/chemistry/chemicals";
 import { columnIds, loggableReadings } from "@/lib/engine/columns";
 import { getTemplate } from "@/lib/templates";
@@ -42,6 +43,16 @@ export type Tool = "select" | "wire" | "pan";
 export type SimStatus = "idle" | "running" | "paused";
 export type RecStatus = "idle" | "recording" | "paused";
 export type BottomTab = "timeline" | "measurements" | "data" | "charts" | "notebook" | "recording";
+
+/** A short-lived audio-visual effect anchored to a component (wall-clock timed). */
+export interface LabEffect {
+  id: string;
+  type: EffectType | "pour";
+  componentId: string;
+  targetId?: string;
+  color?: string;
+  at: number;
+}
 
 export interface Notification {
   id: string;
@@ -132,6 +143,9 @@ interface LabState {
   dropTargetId: string | null;
   chemPickerFor: string | null;
   fitRequest: number;
+  effects: LabEffect[];
+  pushEffect: (e: Omit<LabEffect, "id" | "at">) => void;
+  extinguish: (id: string) => void;
 
   // lifecycle
   newExperiment: (mode: LabMode, title?: string) => void;
@@ -301,6 +315,7 @@ export const useLab = create<LabState>()((set, get) => {
       if (!ids.includes(c.id) || !c.state.mixture) return c;
       const r = react(c.state.mixture, 0, get().simTime);
       for (const info of r.started) {
+        if (info.effect) get().pushEffect({ type: info.effect, componentId: c.id });
         events.push(event("reaction", `${c.name}: ${info.equation} — ${info.type}`));
         for (const o of info.observations) events.push(event("observation", `${c.name}: ${o}`));
       }
@@ -332,6 +347,20 @@ export const useLab = create<LabState>()((set, get) => {
     dropTargetId: null,
     chemPickerFor: null,
     fitRequest: 0,
+    effects: [],
+    pushEffect: (e) => {
+      const now = Date.now();
+      set((s) => ({ effects: [...s.effects.filter((x) => now - x.at < 6000), { ...e, id: uid("fx-"), at: now }].slice(-40) }));
+    },
+    extinguish: (id) => {
+      const c = get().components.find((x) => x.id === id);
+      if (!c || (!c.state.onFire && !c.state.burning)) return;
+      checkpoint();
+      set((s) => ({ components: s.components.map((x) => (x.id === id ? { ...x, state: { ...x.state, onFire: false, burning: null } } : x)) }));
+      get().pushEffect({ type: "extinguish", componentId: id });
+      addEvents([event("action", `${c.name}: flames smothered by covering the vessel`)]);
+      get().recompute();
+    },
 
     /* ---------------- lifecycle ---------------- */
     newExperiment: (mode, title = mode === "chemistry" ? "New chemistry experiment" : "New physics experiment") => {
@@ -698,6 +727,7 @@ export const useLab = create<LabState>()((set, get) => {
       checkpoint();
       const mixture = addChemical(c.state.mixture, chemId, a, s.env.ambientTemperature);
       const updated = s.components.map((x) => (x.id === containerId ? { ...x, state: { ...x.state, mixture } } : x));
+      get().pushEffect({ type: "splash", componentId: containerId });
       const r = withReactions(updated, [containerId]);
       set({ components: r.components, chemicalsUsed: s.chemicalsUsed.includes(chemId) ? s.chemicalsUsed : [...s.chemicalsUsed, chemId] });
       addEvents([event("action", `Added ${describeAmount(chemId, a)} to ${c.name}`), ...r.events]);
@@ -730,6 +760,7 @@ export const useLab = create<LabState>()((set, get) => {
       const desc = describeTransfer(from.state.mixture, amount);
       const t = transfer(from.state.mixture, to.state.mixture, amount);
       const updated = s.components.map((c) => (c.id === fromId ? { ...c, state: { ...c.state, mixture: t.from } } : c.id === toId ? { ...c, state: { ...c.state, mixture: t.to } } : c));
+      get().pushEffect({ type: "pour", componentId: fromId, targetId: toId, color: mixtureAppearance(from.state.mixture).liquid });
       const r = withReactions(updated, [toId]);
       set({ components: r.components });
       addEvents([event("action", `Poured ${desc} from ${from.name} into ${to.name}`), ...r.events]);
@@ -763,6 +794,7 @@ export const useLab = create<LabState>()((set, get) => {
       const touched = res.components.filter((c, i) => c !== s.components[i]).map((c) => c.id);
       const r = withReactions(res.components, touched);
       set({ components: r.components });
+      for (const e of res.events) if (e.effect) get().pushEffect({ type: e.effect, componentId: id });
       addEvents([...res.events.map((e) => event(e.kind, e.message)), ...r.events]);
       get().recompute();
     },
@@ -815,6 +847,7 @@ export const useLab = create<LabState>()((set, get) => {
         time += h;
         for (const e of r.events) {
           evs.push(event(e.event.kind, e.event.message, time));
+          if (e.event.effect) get().pushEffect({ type: e.event.effect, componentId: e.componentId });
         }
       }
       set({ components, simTime: time });
